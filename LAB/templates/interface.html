@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avaliação Brônquica</title>
+    <style>
+        /* Estilos básicos para mobile-friendly */
+        body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background-color: #f4f4f9; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; color: white; margin-right: 10px; }
+        #iniciar-btn { background-color: #28a745; }
+        #finalizar-btn { background-color: #dc3545; }
+        #salvar-btn { background-color: #007bff; }
+        #simular-btn { background-color: #ffc107; color: black; }
+        .status-bar { padding: 10px; margin-top: 15px; border-radius: 4px; font-weight: bold; }
+        #aluno-status { background-color: #e0f7fa; color: #00796b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Avaliação Brônquica 🏥</h1>
+
+    <div class="form-group">
+        <label for="aluno-nome">Nome do Aluno:</label>
+        <input type="text" id="aluno-nome" placeholder="Digite o nome do aluno">
+    </div>
+
+    <div class="form-group">
+        <button id="iniciar-btn" onclick="iniciarTeste()">🟢 INICIAR TESTE</button>
+        <button id="finalizar-btn" onclick="finalizarTeste()" disabled>🛑 FINALIZAR TESTE</button>
+        <button id="salvar-btn" onclick="salvarHistorico()">💾 Salvar Histórico (CSV)</button>
+        <button id="simular-btn" onclick="simularPonto()">✨ Simular Detecção</button>
+    </div>
+
+    <div class="status-bar" id="aluno-status">
+        ALUNO ATUAL: Aguardando Início
+    </div>
+
+    <hr>
+    
+    <h2>Eventos do Teste</h2>
+    <table id="eventos-tabela">
+        <thead>
+            <tr>
+                <th>Seq.</th>
+                <th>Ponto Detectado</th>
+                <th>Tempo (s)</th>
+            </tr>
+        </thead>
+        <tbody>
+            </tbody>
+    </table>
+</div>
+
+<script>
+    const alunoInput = document.getElementById('aluno-nome');
+    const iniciarBtn = document.getElementById('iniciar-btn');
+    const finalizarBtn = document.getElementById('finalizar-btn');
+    const alunoStatus = document.getElementById('aluno-status');
+    const tabelaCorpo = document.querySelector('#eventos-tabela tbody');
+    let testeAtivo = false;
+    let tempoTotal = 0;
+
+    // --- FUNÇÕES DE COMUNICAÇÃO COM O FLASK ---
+
+    function iniciarTeste() {
+        const alunoNome = alunoInput.value.trim();
+        if (!alunoNome) {
+            alert("Por favor, digite o nome do aluno.");
+            return;
+        }
+
+        fetch('/iniciar_teste', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `aluno_nome=${encodeURIComponent(alunoNome)}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'sucesso') {
+                alert(`Teste iniciado para: ${data.aluno}`);
+                // O resto do controle de interface é feito na atualização de status (buscarStatus)
+            } else {
+                alert(`Erro: ${data.mensagem}`);
+            }
+        });
+    }
+
+    function finalizarTeste() {
+        fetch('/finalizar_teste', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'sucesso') {
+                alert(`Teste finalizado! Tempo Total: ${data.tempo_total}s. Os dados foram salvos no servidor (memória).`);
+                // O resto do controle de interface é feito na atualização de status (buscarStatus)
+            } else {
+                alert(`Erro: ${data.mensagem}`);
+            }
+        });
+    }
+    
+    function simularPonto() {
+        if (!testeAtivo) {
+            alert("Inicie o teste primeiro para simular detecções.");
+            return;
+        }
+        // Envia um comando para o Flask simular um toque
+        fetch('/simular_ponto', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'sucesso') {
+                console.log(`Ponto simulado com sucesso. Sequência: ${data.sequencia}`);
+            } else {
+                alert(`Erro na simulação: ${data.mensagem}`);
+            }
+        });
+    }
+
+    function salvarHistorico() {
+        fetch('/salvar', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'sucesso') {
+                alert("Histórico salvo no arquivo CSV do notebook/PC!");
+            } else {
+                alert(`Erro ao salvar: ${data.mensagem}`);
+            }
+        });
+    }
+
+    // --- FUNÇÕES DE INTERFACE ---
+
+    function limparTabela() {
+        tabelaCorpo.innerHTML = '';
+    }
+
+    function atualizarInterface(estado) {
+        testeAtivo = estado.procedimento_ativo;
+        
+        // **CORREÇÃO AQUI:** Habilita/Desabilita o campo de nome e os botões
+        alunoInput.disabled = testeAtivo;
+        iniciarBtn.disabled = testeAtivo;
+        finalizarBtn.disabled = !testeAtivo;
+        
+        // 1. Atualiza o status do aluno e o campo de texto
+        if (testeAtivo) {
+             alunoStatus.textContent = `ALUNO ATUAL: ${estado.aluno_atual} (Em Andamento)`;
+             alunoInput.value = estado.aluno_atual; // Garante que o nome do aluno apareça no campo
+        } else {
+             alunoStatus.textContent = "ALUNO ATUAL: Aguardando Início";
+             // Mantém o valor do aluno para o próximo teste ou limpa se quiser
+        } 
+        
+        // 2. Atualiza a tabela (só adiciona novos eventos)
+        const eventosAtuais = tabelaCorpo.children.length;
+        const novosEventos = estado.resultados_teste_atual.slice(eventosAtuais);
+        
+        if (eventosAtuais > estado.resultados_teste_atual.length) {
+             // Caso o Flask tenha resetado o teste, limpa a tabela
+             limparTabela();
+        }
+
+        novosEventos.forEach(evento => {
+            const linha = tabelaCorpo.insertRow();
+            linha.insertCell().textContent = evento.sequencia;
+            linha.insertCell().textContent = evento.ponto.replace('_', ' '); // Limpa o nome
+            linha.insertCell().textContent = evento.tempo_s.toFixed(2); // Duas casas decimais
+        });
+        
+        // Rola para o final da tabela (se houver muitos eventos)
+        tabelaCorpo.parentElement.scrollTop = tabelaCorpo.parentElement.scrollHeight;
+    }
+
+    // --- LOOP PRINCIPAL (Busca o estado atual no servidor a cada 500ms) ---
+    function buscarStatus() {
+        fetch('/status_teste')
+        .then(response => response.json())
+        .then(estadoAtualizado => {
+            // Se o teste for resetado/iniciado, a função limparTabela será chamada internamente
+            atualizarInterface(estadoAtualizado);
+        })
+        .finally(() => {
+            // Chama a função novamente após 500ms (0.5 segundo)
+            setTimeout(buscarStatus, 500); 
+        });
+    }
+
+    // Inicia a busca de status quando a página carrega
+    buscarStatus();
+</script>
+</body>
+</html>
